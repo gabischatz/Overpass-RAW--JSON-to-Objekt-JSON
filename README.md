@@ -171,15 +171,49 @@ Feature (LineString oder MultiLineString)
 Jedes Segment bekommt eine **Basis-Klassen-ID** (A–H):
 
 ```
-access=private/no  ODER  service=driveway  →  G  (Privatstraße)
+Regelwerk zur Klassifizierung von Wegtypen (Zielattribute G, B, D, E, F, H)
+
+Privatstraße (G)
+
+access=private ODER access=no
+
+ODER service=driveway
+
+Radweg (B)
+
+highway=cycleway
+
+ODER highway=path + (bicycle=designated ODER bicycle=official)
+
+Fußweg mit Rad frei (D)
+
+(highway=footway ODER highway=pedestrian) + bicycle=yes
+
+ODER highway=path + foot=yes + bicycle=yes
+
+Straße (E)
+
+isStreetHighway(highway) = true
+(Annahme: erfasst alle highway-Werte, die übliche Straßentypen darstellen, z. B. residential, unclassified, tertiary, etc.)
+
+Land-/Forstweg (F)
+
+highway=track + bicycle ≠ no
+
+ODER highway=path + bicycle ≠ no
+
+Sonstiges (H)
+
+Alle Fälle, die nicht in 1–5 fallen
+access=private/no  ODER  service=driveway   →  G  (Privatstraße)
 highway=cycleway                            →  B  (Radweg)
-highway=path + bicycle=designated/official →  B  (Radweg)
-highway=footway/pedestrian + bicycle=yes   →  D  (Fußweg mit Rad)
-highway=path + foot=yes + bicycle=yes      →  D
-isStreetHighway(highway)                   →  E  (Straße)
-highway=track + bicycle≠no                →  F  (Land-/Forstweg)
-highway=path + bicycle≠no                 →  F
-sonst                                      →  H  (Sonstiges)
+highway=path + bicycle=designated/official  →  B  (Radweg)
+highway=footway/pedestrian + bicycle=yes    →  D  (Fußweg mit Rad frei)
+highway=path + foot=yes + bicycle=yes       →  D
+isStreetHighway(highway)                    →  E  (Straße)
+highway=track + bicycle≠no                  →  F  (Land-/Forstweg)
+highway=path + bicycle≠no                   →  F
+sonst                                       →  H  (Sonstiges)
 ```
 
 `isStreetHighway` erkennt: `residential`, `living_street`, `unclassified`, `service`,
