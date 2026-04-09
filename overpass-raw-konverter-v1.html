@@ -1,0 +1,1197 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OSM overpass-raw → OO Konverter v1.0.0</title>
+<style>
+    :root{
+        --bg:#0f172a;
+        --panel:#111827;
+        --panel2:#1f2937;
+        --line:#334155;
+        --text:#e5e7eb;
+        --muted:#94a3b8;
+        --accent:#f59e0b;
+        --ok:#22c55e;
+        --err:#ef4444;
+        --blue:#3b82f6;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:linear-gradient(135deg,#0b1220,#182235);color:var(--text);font-family:Arial,Helvetica,sans-serif}
+    body{min-height:100vh;padding:20px}
+    .wrap{max-width:1600px;margin:0 auto}
+    .head{margin-bottom:20px}
+    .head h1{margin:0 0 8px;font-size:30px;color:#fff}
+    .head p{margin:0;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:390px 1fr;gap:18px}
+    .card{background:rgba(17,24,39,.96);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 35px rgba(0,0,0,.25)}
+    .side{padding:16px;display:flex;flex-direction:column;gap:14px}
+    .section{border:1px solid var(--line);border-radius:12px;padding:14px;background:rgba(31,41,55,.45)}
+    .section h2{margin:0 0 10px;font-size:16px;color:#fff}
+    .drop{border:2px dashed #475569;border-radius:14px;padding:28px 16px;text-align:center;cursor:pointer;background:rgba(15,23,42,.55);transition:.2s}
+    .drop.drag{border-color:var(--accent);background:rgba(245,158,11,.08)}
+    .drop strong{display:block;font-size:17px;margin-bottom:8px}
+    .drop small{color:var(--muted)}
+    .hidden{display:none !important}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .field{display:flex;flex-direction:column;gap:6px;flex:1 1 140px}
+    .field label{font-size:12px;color:var(--muted)}
+    .field input,.field select{background:#0b1220;border:1px solid #475569;color:var(--text);padding:10px 12px;border-radius:10px}
+    .btn{border:none;border-radius:10px;padding:11px 14px;font-weight:bold;cursor:pointer}
+    .btn-primary{background:var(--accent);color:#111827}
+    .btn-secondary{background:#334155;color:#fff}
+    .btn-green{background:var(--ok);color:#082f19}
+    .btn-red{background:var(--err);color:#fff}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .status{padding:10px 12px;border-radius:10px;font-size:13px;background:#0b1220;border:1px solid var(--line);color:var(--muted)}
+    .status.ok{border-color:rgba(34,197,94,.5);color:#bbf7d0}
+    .status.err{border-color:rgba(239,68,68,.5);color:#fecaca}
+    .status.warn{border-color:rgba(245,158,11,.5);color:#fde68a}
+    .stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .stat{background:#0b1220;border:1px solid var(--line);padding:10px 12px;border-radius:10px}
+    .stat .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+    .stat .v{font-size:24px;font-weight:bold;margin-top:3px}
+    .main{padding:16px;display:flex;flex-direction:column;gap:16px}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap}
+    .panel{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .box{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0b1220}
+    .box h3{margin:0;padding:12px 14px;font-size:14px;background:#111827;border-bottom:1px solid var(--line)}
+    .box pre{margin:0;padding:14px;max-height:72vh;overflow:auto;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+    .log{max-height:280px;overflow:auto;background:#020617;border:1px solid var(--line);border-radius:12px;padding:10px;font-family:Consolas,monospace;font-size:12px;line-height:1.55}
+    .ok{color:#86efac}.warn{color:#fde68a}.err{color:#fca5a5}.info{color:#93c5fd}
+    .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;font-size:12px}
+    .pill{display:flex;align-items:center;gap:8px;background:#0b1220;border:1px solid var(--line);border-radius:999px;padding:8px 10px}
+    .sw{width:12px;height:12px;border-radius:999px}
+    .footer-note{font-size:12px;color:var(--muted);line-height:1.5}
+    @media (max-width:1100px){
+        .grid{grid-template-columns:1fr}
+        .panel{grid-template-columns:1fr}
+    }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="head">
+        <h1>🚲 OSM overpass-raw Konverter → Objekt Orientiert json v1.0.0</h1>
+        <p>Erzeugt jetzt nicht nur Ketten, sondern Basisobjekte mit positionsbezogenen Verweisen auf Radweg, Schutzstreifen, Radroute und weitere Kategorien.</p>
+    </div>
+
+    <div class="grid">
+        <aside class="card side">
+            <div class="section">
+                <h2>1. Datei laden</h2>
+                <div class="drop" id="dropZone">
+                    <strong>Datei hier ablegen oder anklicken</strong>
+                    <small>Unterstützt GeoJSON, FeatureCollection oder Overpass-RAW-JSON</small>
+                    <input type="file" id="fileInput" accept=".geojson,.json" class="hidden">
+                </div>
+                <div id="statusBox" class="status" style="margin-top:10px">Bereit. Bitte eine OSM-GeoJSON-Datei laden.</div>
+            </div>
+
+            <div class="section">
+                <h2>2. Optionen</h2>
+                <div class="row">
+                    <div class="field">
+                        <label for="proximityMeters">Max. Abstand Overlay → Straße (m)</label>
+                        <input id="proximityMeters" type="number" value="22" min="5" max="80">
+                    </div>
+                    <div class="field">
+                        <label for="parallelDeg">Max. Parallel-Abweichung (°)</label>
+                        <input id="parallelDeg" type="number" value="35" min="5" max="90">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="field">
+                        <label for="coverageRatio">Mindest-Abdeckungsanteil</label>
+                        <input id="coverageRatio" type="number" value="0.55" min="0.1" max="1" step="0.05">
+                    </div>
+                    <div class="field">
+                        <label for="endpointTol">Knoten-Toleranz beim Zusammenfassen</label>
+                        <input id="endpointTol" type="number" value="7" min="1" max="20">
+                    </div>
+                </div>
+                <div class="row">
+                    <button id="convertBtn" class="btn btn-primary" disabled>OO erzeugen</button>
+                    <button id="resetBtn" class="btn btn-secondary">Zurücksetzen</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>3. Export</h2>
+                <div class="row">
+                    <button id="downloadFullBtn" class="btn btn-green" disabled>Vollständiges OO JSON</button>
+                    <button id="downloadRoadBtn" class="btn btn-secondary" disabled>Nur Straßenbasis</button>
+                </div>
+                <div class="row">
+                    <button id="downloadStandaloneBtn" class="btn btn-secondary" disabled>Nur Standalone</button>
+                    <button id="downloadDebugBtn" class="btn btn-secondary" disabled>Debug JSON</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>4. Statistik</h2>
+                <div class="stats">
+                    <div class="stat"><div class="k">Quell-Features</div><div class="v" id="statFeatures">0</div></div>
+                    <div class="stat"><div class="k">Normalisierte Segmente</div><div class="v" id="statSegments">0</div></div>
+                    <div class="stat"><div class="k">Straßen-Basisobjekte</div><div class="v" id="statRoads">0</div></div>
+                    <div class="stat"><div class="k">Standalone-Objekte</div><div class="v" id="statStandalone">0</div></div>
+                    <div class="stat"><div class="k">Referenzen gesamt</div><div class="v" id="statRefs">0</div></div>
+                    <div class="stat"><div class="k">Externe Verknüpfungen</div><div class="v" id="statLinks">0</div></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>5. Klassenlogik</h2>
+                <div class="legend">
+                    <div class="pill"><span class="sw" style="background:#22c55e"></span><span>A Radroute</span></div>
+                    <div class="pill"><span class="sw" style="background:#3b82f6"></span><span>B Radweg</span></div>
+                    <div class="pill"><span class="sw" style="background:#a855f7"></span><span>C Schutzstreifen</span></div>
+                    <div class="pill"><span class="sw" style="background:#facc15"></span><span>D Fußweg + Rad</span></div>
+                    <div class="pill"><span class="sw" style="background:#f97316"></span><span>E Straße</span></div>
+                    <div class="pill"><span class="sw" style="background:#84cc16"></span><span>F Land-/Forstweg</span></div>
+                    <div class="pill"><span class="sw" style="background:#fb7185"></span><span>G Privat</span></div>
+                    <div class="pill"><span class="sw" style="background:#64748b"></span><span>H Sonstiges</span></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>6. Hinweise</h2>
+                <div class="footer-note">
+                    Diese Version erzeugt für Straßenbasisobjekte ein Feld <code>references</code>. Dort stehen positionsbezogene Verweise auf andere Kategorien mit <code>startPosM</code>, <code>endPosM</code>, Seite, Fahrtrichtung und Quellsegment.<br><br>
+                    Bei separaten parallelen Wegen und Schutzstreifen ist die Zuordnung eine Heuristik. Die Seite und die Fahrtrichtung werden aus Geometrie und Tagging abgeleitet.
+                </div>
+            </div>
+        </aside>
+
+        <main class="card main">
+            <div class="toolbar">
+                <div style="font-weight:bold">Ausgabe-Vorschau</div>
+            </div>
+
+            <div class="box">
+                <h3>Verarbeitungs-Log</h3>
+                <div id="logBox" class="log">[SYSTEM] Bereit.</div>
+            </div>
+
+            <div class="panel">
+                <div class="box">
+                    <h3>OO Straßenbasis mit Referenzen</h3>
+                    <pre id="roadsPreview">Noch keine Daten.</pre>
+                </div>
+                <div class="box">
+                    <h3>Standalone / übrige Objekte</h3>
+                    <pre id="standalonePreview">Noch keine Daten.</pre>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="box">
+                    <h3>Quell-Features (Auszug)</h3>
+                    <pre id="sourcePreview">Noch keine Daten.</pre>
+                </div>
+                <div class="box">
+                    <h3>Diagnose / Mapping</h3>
+                    <pre id="debugPreview">Noch keine Daten.</pre>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+const CLASS_META = {
+    A:{name:'Radroute', color:'#22c55e'},
+    B:{name:'Radweg', color:'#3b82f6'},
+    C:{name:'Schutzstreifen', color:'#a855f7'},
+    D:{name:'Fußweg mit Rad frei', color:'#facc15'},
+    E:{name:'Straße', color:'#f97316'},
+    F:{name:'Land-/Forstweg', color:'#84cc16'},
+    G:{name:'Privatstraße/-weg', color:'#fb7185'},
+    H:{name:'Sonstiges', color:'#64748b'}
+};
+
+const state = {
+    inputName: '',
+    rawData: null,
+    sourceFeatures: [],
+    normalizedSegments: [],
+    output: null,
+    debug: null
+};
+
+const els = {
+    dropZone: document.getElementById('dropZone'),
+    fileInput: document.getElementById('fileInput'),
+    statusBox: document.getElementById('statusBox'),
+    logBox: document.getElementById('logBox'),
+    convertBtn: document.getElementById('convertBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    downloadFullBtn: document.getElementById('downloadFullBtn'),
+    downloadRoadBtn: document.getElementById('downloadRoadBtn'),
+    downloadStandaloneBtn: document.getElementById('downloadStandaloneBtn'),
+    downloadDebugBtn: document.getElementById('downloadDebugBtn'),
+    sourcePreview: document.getElementById('sourcePreview'),
+    roadsPreview: document.getElementById('roadsPreview'),
+    standalonePreview: document.getElementById('standalonePreview'),
+    debugPreview: document.getElementById('debugPreview')
+};
+
+function log(msg, type='info'){
+    const cls = type === 'ok' ? 'ok' : type === 'warn' ? 'warn' : type === 'err' ? 'err' : 'info';
+    const time = new Date().toLocaleTimeString('de-DE');
+    els.logBox.innerHTML += `\n<span class="${cls}">[${time}] ${escapeHtml(msg)}</span>`;
+    els.logBox.scrollTop = els.logBox.scrollHeight;
+}
+function setStatus(msg, kind=''){
+    els.statusBox.className = 'status' + (kind ? ' ' + kind : '');
+    els.statusBox.textContent = msg;
+}
+function escapeHtml(v){
+    return String(v)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;');
+}
+
+function readOptions(){
+    return {
+        proximityMeters: clamp(Number(document.getElementById('proximityMeters').value) || 22, 5, 80),
+        parallelDeg: clamp(Number(document.getElementById('parallelDeg').value) || 35, 5, 90),
+        coverageRatio: clamp(Number(document.getElementById('coverageRatio').value) || 0.55, 0.1, 1),
+        endpointTol: clamp(Number(document.getElementById('endpointTol').value) || 7, 1, 20)
+    };
+}
+function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+function pointKey(lon, lat, precision=8){
+    return lon.toFixed(precision) + ',' + lat.toFixed(precision);
+}
+function metersToDegreesLat(m){ return m / 111320; }
+function haversine(lon1, lat1, lon2, lat2){
+    const R = 6371000;
+    const toRad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * toRad;
+    const dLon = (lon2 - lon1) * toRad;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*toRad) * Math.cos(lat2*toRad) * Math.sin(dLon/2)**2;
+    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function calculateLength(coords){
+    let total = 0;
+    for(let i=1;i<coords.length;i++) total += haversine(coords[i-1][0], coords[i-1][1], coords[i][0], coords[i][1]);
+    return Math.round(total);
+}
+function dedupeCoords(coords){
+    if(!coords || !coords.length) return [];
+    const out = [coords[0]];
+    for(let i=1;i<coords.length;i++){
+        const a = out[out.length-1], b = coords[i];
+        if (Math.abs(a[0]-b[0]) > 1e-9 || Math.abs(a[1]-b[1]) > 1e-9) out.push(b);
+    }
+    return out;
+}
+function normalizeName(v){
+    return String(v || 'unnamed').trim() || 'unnamed';
+}
+function normalizeString(v){
+    return String(v || '').trim().toLowerCase();
+}
+function bearingDeg(lon1, lat1, lon2, lat2){
+    const toRad = Math.PI/180, toDeg = 180/Math.PI;
+    const y = Math.sin((lon2-lon1)*toRad) * Math.cos(lat2*toRad);
+    const x = Math.cos(lat1*toRad) * Math.sin(lat2*toRad) - Math.sin(lat1*toRad) * Math.cos(lat2*toRad) * Math.cos((lon2-lon1)*toRad);
+    return (Math.atan2(y, x) * toDeg + 360) % 360;
+}
+function angleDiff(a, b){
+    let d = Math.abs(a - b) % 360;
+    if (d > 180) d = 360 - d;
+    return Math.min(d, Math.abs(180 - d));
+}
+function segmentPointProjection(pLon, pLat, aLon, aLat, bLon, bLat){
+    const cosLat = Math.cos(((aLat+bLat)/2) * Math.PI / 180);
+    const ax = aLon * cosLat, ay = aLat;
+    const bx = bLon * cosLat, by = bLat;
+    const px = pLon * cosLat, py = pLat;
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx*dx + dy*dy;
+    let t = 0;
+    if(len2 > 0){
+        t = ((px-ax)*dx + (py-ay)*dy) / len2;
+        t = Math.max(0, Math.min(1, t));
+    }
+    const projX = ax + t*dx;
+    const projY = ay + t*dy;
+    const projLon = projX / cosLat;
+    const projLat = projY;
+    const distM = haversine(pLon, pLat, projLon, projLat);
+    return {t, distM, projLon, projLat};
+}
+function projectPointToPolyline(point, coords, cumulative){
+    let best = null;
+    for(let i=1;i<coords.length;i++){
+        const a = coords[i-1], b = coords[i];
+        const proj = segmentPointProjection(point[0], point[1], a[0], a[1], b[0], b[1]);
+        if(!best || proj.distM < best.distM){
+            const segLen = haversine(a[0], a[1], b[0], b[1]);
+            best = {
+                distM: proj.distM,
+                lon: proj.projLon,
+                lat: proj.projLat,
+                measureM: cumulative[i-1] + segLen * proj.t,
+                segmentIndex: i-1,
+                segmentBearing: bearingDeg(a[0], a[1], b[0], b[1]),
+                a, b
+            };
+        }
+    }
+    return best;
+}
+function cumulativeMeasures(coords){
+    const cum = [0];
+    for(let i=1;i<coords.length;i++) cum.push(cum[i-1] + haversine(coords[i-1][0], coords[i-1][1], coords[i][0], coords[i][1]));
+    return cum;
+}
+function isStreetHighway(hw){
+    return ['residential','living_street','unclassified','service','tertiary','secondary','primary','trunk','motorway'].includes(hw);
+}
+function isTrackish(hw){
+    return ['track'].includes(hw);
+}
+function isFootwayLike(hw){
+    return ['footway','pedestrian'].includes(hw);
+}
+function flattenProperties(props){
+    const out = Object.assign({}, props || {});
+    if (props && props.tags && typeof props.tags === 'object'){
+        Object.keys(props.tags).forEach(k => {
+            if (!(k in out)) out[k] = props.tags[k];
+        });
+    }
+    return out;
+}
+function getRelationNames(props){
+    const names = [];
+    const raw = props.relationNames || props.relations || props.route_names || props.routeNames;
+    if(Array.isArray(raw)){
+        raw.forEach(v => names.push(String(v)));
+    } else if (typeof raw === 'string' && raw.trim()){
+        raw.split('|').forEach(v => names.push(v.trim()));
+    }
+    return names.filter(Boolean);
+}
+function uniqueBy(arr, keyFn){
+    const seen = new Set(), out=[];
+    for(const item of arr){
+        const key = keyFn(item);
+        if(seen.has(key)) continue;
+        seen.add(key);
+        out.push(item);
+    }
+    return out;
+}
+function inferBaseClass(props){
+    const highway = normalizeString(props.highway);
+    const bicycle = normalizeString(props.bicycle);
+    const access = normalizeString(props.access);
+    const service = normalizeString(props.service);
+    if (access === 'private' || access === 'no' || service === 'driveway' || normalizeString(props.motor_vehicle) === 'private') return 'G';
+    if (highway === 'cycleway') return 'B';
+    if (highway === 'path' && (bicycle === 'designated' || bicycle === 'official')) return 'B';
+    if (isFootwayLike(highway) && ['yes','designated','permissive'].includes(bicycle)) return 'D';
+    if (highway === 'path' && normalizeString(props.foot) === 'yes' && ['yes','designated','permissive'].includes(bicycle)) return 'D';
+    if (isStreetHighway(highway)) return 'E';
+    if (isTrackish(highway) && bicycle !== 'no') return 'F';
+    if (highway === 'path' && bicycle !== 'no') return 'F';
+    return 'H';
+}
+function detectTagReferences(props, baseClassId){
+    const refs = [];
+    const relationNames = getRelationNames(props);
+    const route = normalizeString(props.route);
+    const network = normalizeString(props.network);
+    const highway = normalizeString(props.highway);
+
+    const addRef = (ref) => refs.push(Object.assign({
+        referenceId: '',
+        source: 'same_segment',
+        startPosM: 0,
+        endPosM: null,
+        side: 'unknown',
+        direction: 'both',
+        confidence: 1,
+        origin: 'tag'
+    }, ref));
+
+    const isRoute = route === 'bicycle' || ['lcn','rcn','ncn','icn'].includes(network) || relationNames.some(name => /radweg|radroute|cycle|velo|bicycle/i.test(name));
+    if(isRoute) addRef({classId:'A', kind:'radroute', relationNames});
+
+    function addLaneLike(side, value, laneValue){
+        const v = normalizeString(value);
+        const lv = normalizeString(laneValue);
+        if (v === 'track') addRef({classId:'B', kind:'radweg', side});
+        if (v === 'lane' || v === 'shared_lane' || lv === 'advisory' || lv === 'exclusive') addRef({classId:'C', kind: v === 'shared_lane' ? 'shared_lane' : 'schutzstreifen', side});
+    }
+
+    addLaneLike('both', props['cycleway:both'], props['cycleway:both:lane']);
+    addLaneLike('left', props['cycleway:left'], props['cycleway:left:lane']);
+    addLaneLike('right', props['cycleway:right'], props['cycleway:right:lane']);
+    addLaneLike('center', props.cycleway, props['cycleway:lane']);
+
+    if (baseClassId === 'E'){
+        if (normalizeString(props.segregated) === 'yes' && highway === 'path' && normalizeString(props.bicycle) !== 'no'){
+            addRef({classId:'B', kind:'radweg', side:'unknown'});
+        }
+    }
+
+    return uniqueBy(refs, r => [r.classId, r.kind, r.side, r.direction, JSON.stringify(r.relationNames||[])].join('|'));
+}
+
+function featureToSegments(feature, featureIndex){
+    const properties = flattenProperties(feature.properties || {});
+    const geometry = feature.geometry || {};
+    const type = geometry.type;
+    const geoms = [];
+
+    if (type === 'LineString'){
+        geoms.push(geometry.coordinates);
+    } else if (type === 'MultiLineString'){
+        geometry.coordinates.forEach(coords => geoms.push(coords));
+    } else {
+        return [];
+    }
+
+    const segments = [];
+    geoms.forEach((coords, idx) => {
+        if(!Array.isArray(coords) || coords.length < 2) return;
+        const cleaned = dedupeCoords(coords.map(c => [Number(c[0]), Number(c[1])]).filter(c => Number.isFinite(c[0]) && Number.isFinite(c[1])));
+        if(cleaned.length < 2) return;
+
+        const name = normalizeName(properties.name || properties.ref || properties['addr:street'] || 'unnamed');
+        const baseClassId = inferBaseClass(properties);
+        const referencesFromTags = detectTagReferences(properties, baseClassId);
+        const segId = `seg_${featureIndex}_${idx}`;
+
+        segments.push({
+            segmentId: segId,
+            sourceFeatureIndex: featureIndex,
+            geometryType: type,
+            name,
+            properties,
+            baseClassId,
+            baseClassName: CLASS_META[baseClassId].name,
+            referencesFromTags,
+            coords: cleaned,
+            startNodeKey: pointKey(cleaned[0][0], cleaned[0][1]),
+            endNodeKey: pointKey(cleaned[cleaned.length-1][0], cleaned[cleaned.length-1][1]),
+            lengthM: calculateLength(cleaned),
+            overallBearing: bearingDeg(cleaned[0][0], cleaned[0][1], cleaned[cleaned.length-1][0], cleaned[cleaned.length-1][1])
+        });
+    });
+
+    return segments;
+}
+
+function joinConnectedSegments(segments, endpointTolMeters){
+    const unused = new Set(segments.map(s => s.segmentId));
+    const segById = new Map(segments.map(s => [s.segmentId, s]));
+    const keyIndex = new Map();
+
+    const addNearKey = (lon, lat, segId, side) => {
+        const precision = endpointTolMeters <= 2 ? 7 : 6;
+        const key = pointKey(lon, lat, precision);
+        if(!keyIndex.has(key)) keyIndex.set(key, []);
+        keyIndex.get(key).push({segId, side, lon, lat});
+    };
+
+    segments.forEach(seg => {
+        const start = seg.coords[0], end = seg.coords[seg.coords.length-1];
+        addNearKey(start[0], start[1], seg.segmentId, 'start');
+        addNearKey(end[0], end[1], seg.segmentId, 'end');
+    });
+
+    function getCandidates(point, currentStart, currentEnd, currentBearing){
+        const precision = endpointTolMeters <= 2 ? 7 : 6;
+        const key = pointKey(point[0], point[1], precision);
+        const raw = keyIndex.get(key) || [];
+        const out = [];
+        raw.forEach(item => {
+            if(!unused.has(item.segId)) return;
+            const seg = segById.get(item.segId);
+            const targetPoint = item.side === 'start' ? seg.coords[0] : seg.coords[seg.coords.length-1];
+            const dist = haversine(point[0], point[1], targetPoint[0], targetPoint[1]);
+            if (dist <= endpointTolMeters + 0.7){
+                let anglePenalty = 0;
+                if (typeof currentBearing === 'number'){
+                    const candidateBearing = item.side === 'start'
+                        ? seg.overallBearing
+                        : bearingDeg(seg.coords[seg.coords.length-1][0], seg.coords[seg.coords.length-1][1], seg.coords[0][0], seg.coords[0][1]);
+                    anglePenalty = angleDiff(currentBearing, candidateBearing);
+                }
+                out.push({seg, attachSide:item.side, dist, anglePenalty});
+            }
+        });
+        out.sort((a,b) => a.dist - b.dist || a.anglePenalty - b.anglePenalty || a.seg.lengthM - b.seg.lengthM);
+        return out;
+    }
+
+    const chains = [];
+    while(unused.size){
+        const firstId = unused.values().next().value;
+        const first = segById.get(firstId);
+        unused.delete(firstId);
+
+        const chainSegs = [first];
+        let coords = [...first.coords];
+
+        let extended = true;
+        while(extended){
+            extended = false;
+            const start = coords[0], end = coords[coords.length-1];
+
+            const frontBearing = coords.length > 1 ? bearingDeg(coords[1][0], coords[1][1], coords[0][0], coords[0][1]) : undefined;
+            const backBearing = coords.length > 1 ? bearingDeg(coords[coords.length-2][0], coords[coords.length-2][1], coords[coords.length-1][0], coords[coords.length-1][1]) : undefined;
+
+            const backCandidates = getCandidates(end, start, end, backBearing);
+            if(backCandidates.length){
+                const c = backCandidates[0];
+                unused.delete(c.seg.segmentId);
+                chainSegs.push(c.seg);
+                const addCoords = c.attachSide === 'start' ? c.seg.coords.slice(1) : [...c.seg.coords].reverse().slice(1);
+                coords = dedupeCoords([...coords, ...addCoords]);
+                extended = true;
+                continue;
+            }
+
+            const frontCandidates = getCandidates(start, start, end, frontBearing);
+            if(frontCandidates.length){
+                const c = frontCandidates[0];
+                unused.delete(c.seg.segmentId);
+                chainSegs.unshift(c.seg);
+                const addCoords = c.attachSide === 'end' ? c.seg.coords.slice(0, -1) : [...c.seg.coords].reverse().slice(0, -1);
+                coords = dedupeCoords([...addCoords, ...coords]);
+                extended = true;
+            }
+        }
+
+        chains.push({
+            name: first.name,
+            baseClassId: first.baseClassId,
+            memberSegments: chainSegs,
+            coords: dedupeCoords(coords)
+        });
+    }
+
+    return chains;
+}
+
+function buildRoadBases(segments, options){
+    const streetSegments = segments.filter(s => s.baseClassId === 'E');
+    const groups = new Map();
+
+    streetSegments.forEach(seg => {
+        const key = normalizeName(seg.name);
+        if(!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(seg);
+    });
+
+    const roads = [];
+    let roadCounter = 1;
+
+    groups.forEach((groupSegs, groupName) => {
+        const chains = joinConnectedSegments(groupSegs, options.endpointTol);
+        chains.forEach(chain => {
+            const coords = dedupeCoords(chain.coords);
+            const lengthM = calculateLength(coords);
+            const cumulative = cumulativeMeasures(coords);
+            const roadId = `road_${String(roadCounter++).padStart(4,'0')}`;
+            const mergedTags = {};
+            chain.memberSegments.forEach(seg => {
+                Object.keys(seg.properties).forEach(k => {
+                    if (!(k in mergedTags) && seg.properties[k] !== undefined && seg.properties[k] !== null && String(seg.properties[k]).trim() !== '') mergedTags[k] = seg.properties[k];
+                });
+            });
+
+            const road = {
+                roadId,
+                chainId: roadId,
+                id: roadId,
+                name: normalizeName(groupName),
+                baseClassId: 'E',
+                baseClassName: CLASS_META.E.name,
+                coords,
+                lengthM,
+                startNodeKey: pointKey(coords[0][0], coords[0][1]),
+                endNodeKey: pointKey(coords[coords.length-1][0], coords[coords.length-1][1]),
+                memberSegmentIds: chain.memberSegments.map(s => s.segmentId),
+                tags: mergedTags,
+                references: [],
+                _helper: { cumulative, memberSegments: chain.memberSegments }
+            };
+
+            roads.push(road);
+        });
+    });
+
+    return roads;
+}
+
+function addDirectReferencesToRoads(roads){
+    let refCounter = 1;
+    roads.forEach(road => {
+        const existing = [];
+        road._helper.memberSegments.forEach(seg => {
+            if(!seg.referencesFromTags.length) return;
+            const projStart = projectPointToPolyline(seg.coords[0], road.coords, road._helper.cumulative);
+            const projEnd = projectPointToPolyline(seg.coords[seg.coords.length-1], road.coords, road._helper.cumulative);
+            const startPosM = Math.min(projStart.measureM, projEnd.measureM);
+            const endPosM = Math.max(projStart.measureM, projEnd.measureM) || road.lengthM;
+
+            seg.referencesFromTags.forEach(ref => {
+                const out = Object.assign({}, ref, {
+                    referenceId: `ref_${String(refCounter++).padStart(5,'0')}`,
+                    sourceSegmentId: seg.segmentId,
+                    sourceName: seg.name,
+                    startPosM: Math.round(startPosM),
+                    endPosM: Math.round(endPosM),
+                    startCoord: seg.coords[0],
+                    endCoord: seg.coords[seg.coords.length-1]
+                });
+                existing.push(out);
+            });
+        });
+
+        road.references.push(...collapseRoadReferences(existing, road.lengthM));
+    });
+
+    return refCounter;
+}
+
+function collapseRoadReferences(refs, roadLengthM){
+    const sorted = refs.slice().sort((a,b) =>
+        (a.classId.localeCompare(b.classId)) ||
+        (a.side||'').localeCompare(b.side||'') ||
+        (a.direction||'').localeCompare(b.direction||'') ||
+        (a.startPosM - b.startPosM)
+    );
+    const out = [];
+    for(const ref of sorted){
+        const prev = out[out.length-1];
+        if(prev &&
+           prev.classId === ref.classId &&
+           prev.kind === ref.kind &&
+           prev.side === ref.side &&
+           prev.direction === ref.direction &&
+           Math.abs(prev.endPosM - ref.startPosM) <= 8){
+            prev.endPosM = Math.max(prev.endPosM, ref.endPosM);
+            prev.sourceSegmentIds = uniqueStrings((prev.sourceSegmentIds||[]).concat(ref.sourceSegmentId));
+        } else {
+            out.push(Object.assign({}, ref, {
+                startPosM: clamp(Math.round(ref.startPosM), 0, Math.round(roadLengthM)),
+                endPosM: clamp(Math.round(ref.endPosM == null ? roadLengthM : ref.endPosM), 0, Math.round(roadLengthM)),
+                sourceSegmentIds: [ref.sourceSegmentId]
+            }));
+        }
+    }
+    return out;
+}
+function uniqueStrings(arr){
+    return [...new Set(arr.filter(Boolean))];
+}
+
+function buildOverlayObjects(segments, options){
+    const overlays = segments.filter(s => s.baseClassId !== 'E');
+    const groups = new Map();
+    overlays.forEach(seg => {
+        const key = `${seg.baseClassId}|${normalizeName(seg.name)}`;
+        if(!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(seg);
+    });
+
+    const objs = [];
+    let counter = 1;
+    groups.forEach(groupSegs => {
+        const chains = joinConnectedSegments(groupSegs, options.endpointTol);
+        chains.forEach(chain => {
+            const first = chain.memberSegments[0];
+            const coords = dedupeCoords(chain.coords);
+            objs.push({
+                objectId: `obj_${String(counter++).padStart(4,'0')}`,
+                name: first.name,
+                baseClassId: first.baseClassId,
+                baseClassName: CLASS_META[first.baseClassId].name,
+                coords,
+                lengthM: calculateLength(coords),
+                startNodeKey: pointKey(coords[0][0], coords[0][1]),
+                endNodeKey: pointKey(coords[coords.length-1][0], coords[coords.length-1][1]),
+                memberSegmentIds: chain.memberSegments.map(s => s.segmentId),
+                tags: first.properties,
+                linkedRoadId: null,
+                linkDiagnostics: null
+            });
+        });
+    });
+    return objs;
+}
+
+function mapExternalOverlaysToRoads(overlayObjects, roads, options, startingRefCounter){
+    let refCounter = startingRefCounter;
+    const linkDiagnostics = [];
+
+    overlayObjects.forEach(obj => {
+        if (obj.baseClassId === 'H' || obj.coords.length < 2 || !roads.length) return;
+
+        let best = null;
+        const overlayBearing = bearingDeg(obj.coords[0][0], obj.coords[0][1], obj.coords[obj.coords.length-1][0], obj.coords[obj.coords.length-1][1]);
+
+        roads.forEach(road => {
+            if (road.coords.length < 2) return;
+
+            const projections = obj.coords.map(pt => projectPointToPolyline(pt, road.coords, road._helper.cumulative));
+            const near = projections.filter(p => p && p.distM <= options.proximityMeters);
+            if (near.length < Math.max(2, Math.ceil(obj.coords.length * options.coverageRatio))) return;
+
+            const avgDist = near.reduce((sum,p) => sum + p.distM, 0) / near.length;
+            const measures = near.map(p => p.measureM).sort((a,b) => a-b);
+            const startPosM = measures[0];
+            const endPosM = measures[measures.length-1];
+            const coveredLength = Math.max(0, endPosM - startPosM);
+
+            if (coveredLength < Math.min(12, obj.lengthM * 0.25) && obj.lengthM > 18) return;
+
+            const localRoadBearing = near[Math.floor(near.length/2)].segmentBearing;
+            const parallelDiff = angleDiff(overlayBearing, localRoadBearing);
+            if (parallelDiff > options.parallelDeg && obj.baseClassId !== 'A') return;
+
+            let sameNameBonus = 0;
+            if (normalizeString(obj.name) !== 'unnamed' && normalizeString(obj.name) === normalizeString(road.name)) sameNameBonus = 6;
+
+            const midIdx = Math.floor(near.length/2);
+            const sample = near[midIdx];
+            const objMid = obj.coords[Math.floor(obj.coords.length/2)];
+            const side = inferSide(sample.a, sample.b, objMid);
+            const direction = inferDirection(overlayBearing, localRoadBearing);
+
+            const confidence = Math.max(0.05, Math.min(0.99, 1 - (avgDist / Math.max(5, options.proximityMeters * 1.4)) - (parallelDiff / 180) + (sameNameBonus / 100)));
+            const score = avgDist + parallelDiff * 0.8 - sameNameBonus;
+
+            const candidate = {
+                roadId: road.roadId,
+                roadName: road.name,
+                startPosM: Math.round(startPosM),
+                endPosM: Math.round(endPosM),
+                avgDistM: Math.round(avgDist * 10) / 10,
+                parallelDiff: Math.round(parallelDiff * 10) / 10,
+                side,
+                direction,
+                confidence: Math.round(confidence * 1000) / 1000,
+                score
+            };
+
+            if (!best || candidate.score < best.score) best = candidate;
+        });
+
+        if (best){
+            obj.linkedRoadId = best.roadId;
+            obj.linkDiagnostics = best;
+            const road = roads.find(r => r.roadId === best.roadId);
+            const ref = {
+                referenceId: `ref_${String(refCounter++).padStart(5,'0')}`,
+                source: 'parallel_object',
+                sourceSegmentId: obj.memberSegmentIds[0],
+                sourceObjectId: obj.objectId,
+                targetChainId: obj.objectId,
+                sourceName: obj.name,
+                classId: obj.baseClassId,
+                kind: classKindFromClassId(obj.baseClassId),
+                side: best.side,
+                direction: best.direction,
+                startPosM: best.startPosM,
+                endPosM: best.endPosM,
+                startCoord: obj.coords[0],
+                endCoord: obj.coords[obj.coords.length-1],
+                avgDistanceM: best.avgDistM,
+                confidence: best.confidence,
+                origin: 'geometry'
+            };
+            road.references.push(ref);
+            linkDiagnostics.push({objectId: obj.objectId, name: obj.name, classId: obj.baseClassId, matchedTo: best.roadId, roadName: best.roadName, side: best.side, direction: best.direction, avgDistanceM: best.avgDistM, confidence: best.confidence});
+        } else {
+            linkDiagnostics.push({objectId: obj.objectId, name: obj.name, classId: obj.baseClassId, matchedTo: null});
+        }
+    });
+
+    roads.forEach(road => {
+        road.references = collapseAndSortRefs(road.references, road.lengthM);
+    });
+
+    return { nextRefCounter: refCounter, linkDiagnostics };
+}
+
+function inferSide(a, b, p){
+    const vx = b[0] - a[0], vy = b[1] - a[1];
+    const wx = p[0] - a[0], wy = p[1] - a[1];
+    const cross = vx * wy - vy * wx;
+    if (Math.abs(cross) < 1e-12) return 'center';
+    return cross > 0 ? 'left' : 'right';
+}
+function inferDirection(overlayBearing, roadBearing){
+    const diff = angleDiff(overlayBearing, roadBearing);
+    if (diff <= 35) return 'forward';
+    if (Math.abs(diff - 180) <= 35 || diff > 145) return 'backward';
+    return 'both';
+}
+function classKindFromClassId(classId){
+    switch(classId){
+        case 'A': return 'radroute';
+        case 'B': return 'radweg';
+        case 'C': return 'schutzstreifen';
+        case 'D': return 'fussweg_radfrei';
+        case 'E': return 'strasse';
+        case 'F': return 'land_forstweg';
+        case 'G': return 'privatweg';
+        default: return 'sonstiges';
+    }
+}
+function collapseAndSortRefs(refs, roadLengthM){
+    const normalized = refs.map(ref => Object.assign({}, ref, {
+        startPosM: clamp(Math.round(Math.min(ref.startPosM, ref.endPosM)), 0, Math.round(roadLengthM)),
+        endPosM: clamp(Math.round(Math.max(ref.startPosM, ref.endPosM)), 0, Math.round(roadLengthM))
+    }));
+
+    normalized.sort((a,b) =>
+        a.startPosM - b.startPosM ||
+        a.classId.localeCompare(b.classId) ||
+        (a.side||'').localeCompare(b.side||'')
+    );
+
+    const out = [];
+    normalized.forEach(ref => {
+        const prev = out[out.length-1];
+        if(prev &&
+           prev.classId === ref.classId &&
+           prev.kind === ref.kind &&
+           prev.side === ref.side &&
+           prev.direction === ref.direction &&
+           Math.abs(prev.endPosM - ref.startPosM) <= 8){
+            prev.endPosM = Math.max(prev.endPosM, ref.endPosM);
+            prev.sourceSegmentIds = uniqueStrings((prev.sourceSegmentIds||[]).concat(ref.sourceSegmentIds || ref.sourceSegmentId || []));
+            if (ref.confidence != null) prev.confidence = Math.max(prev.confidence || 0, ref.confidence);
+        } else {
+            out.push(Object.assign({}, ref, {
+                sourceSegmentIds: uniqueStrings((ref.sourceSegmentIds || []).concat(ref.sourceSegmentId || []))
+            }));
+        }
+    });
+    return out;
+}
+
+function finalizeRoads(roads){
+    return roads.map(road => {
+        const copy = Object.assign({}, road);
+        delete copy._helper;
+        return copy;
+    });
+}
+
+function buildStandaloneOutput(objects){
+    return objects.filter(obj => !obj.linkedRoadId).map(obj => ({
+        objectId: obj.objectId,
+        chainId: obj.objectId,
+        id: obj.objectId,
+        name: obj.name,
+        classId: obj.baseClassId,
+        className: obj.baseClassName,
+        coords: obj.coords,
+        lengthM: obj.lengthM,
+        startNodeKey: obj.startNodeKey,
+        endNodeKey: obj.endNodeKey,
+        memberSegmentIds: obj.memberSegmentIds,
+        tags: obj.tags
+    }));
+}
+
+
+function buildChainsOutput(roads, standalone){
+    const roadChains = roads.map(road => ({
+        chainId: road.chainId || road.roadId,
+        id: road.chainId || road.roadId,
+        roadId: road.roadId,
+        name: road.name,
+        classId: road.baseClassId,
+        className: road.baseClassName,
+        coords: road.coords,
+        lengthM: road.lengthM,
+        startNodeKey: road.startNodeKey,
+        endNodeKey: road.endNodeKey,
+        memberSegmentIds: road.memberSegmentIds,
+        tags: road.tags,
+        references: (road.references || []).map(ref => ({
+            ...ref,
+            targetChainId: ref.targetChainId || ref.sourceObjectId || null
+        }))
+    }));
+
+    const standaloneChains = standalone.map(obj => ({
+        chainId: obj.chainId || obj.objectId,
+        id: obj.chainId || obj.objectId,
+        objectId: obj.objectId,
+        name: obj.name,
+        classId: obj.classId,
+        className: obj.className,
+        coords: obj.coords,
+        lengthM: obj.lengthM,
+        startNodeKey: obj.startNodeKey,
+        endNodeKey: obj.endNodeKey,
+        memberSegmentIds: obj.memberSegmentIds,
+        tags: obj.tags,
+        references: []
+    }));
+
+    return roadChains.concat(standaloneChains);
+}
+
+function summarizeSourceFeatures(features){
+    return {
+        featureCount: features.length,
+        sample: features.slice(0, 6).map(f => ({
+            geometryType: f.geometry?.type,
+            name: normalizeName((f.properties||{}).name || (f.properties||{}).ref || 'unnamed'),
+            highway: (f.properties||{}).highway || ((f.properties||{}).tags || {}).highway || null
+        }))
+    };
+}
+
+function updatePreviews(output, debugInfo){
+    els.roadsPreview.textContent = JSON.stringify(output.roads.slice(0, 8), null, 2) + (output.roads.length > 8 ? '\n\n... weitere ' + (output.roads.length - 8) + ' Straßenbasisobjekte' : '');
+    els.standalonePreview.textContent = JSON.stringify(output.standalone.slice(0, 12), null, 2) + (output.standalone.length > 12 ? '\n\n... weitere ' + (output.standalone.length - 12) + ' Standalone-Objekte' : '');
+    els.sourcePreview.textContent = JSON.stringify(summarizeSourceFeatures(state.sourceFeatures), null, 2);
+    els.debugPreview.textContent = JSON.stringify(debugInfo, null, 2);
+}
+
+function updateStats(output, debugInfo){
+    const refsTotal = output.roads.reduce((sum, r) => sum + r.references.length, 0);
+    const linkedTotal = debugInfo.externalLinks.filter(x => x.matchedTo).length;
+    document.getElementById('statFeatures').textContent = state.sourceFeatures.length;
+    document.getElementById('statSegments').textContent = state.normalizedSegments.length;
+    document.getElementById('statRoads').textContent = output.roads.length;
+    document.getElementById('statStandalone').textContent = output.standalone.length;
+    document.getElementById('statRefs').textContent = refsTotal;
+    document.getElementById('statLinks').textContent = linkedTotal;
+}
+
+function convertNow(){
+    if(!state.sourceFeatures.length){
+        setStatus('Es ist keine Quelldatei geladen.', 'err');
+        return;
+    }
+
+    const options = readOptions();
+    log('Konvertierung gestartet.', 'info');
+    setStatus('Konvertierung läuft ...', 'warn');
+
+    const normalizedSegments = [];
+    state.sourceFeatures.forEach((feature, index) => {
+        featureToSegments(feature, index).forEach(seg => normalizedSegments.push(seg));
+    });
+
+    state.normalizedSegments = normalizedSegments;
+    log(normalizedSegments.length + ' normalisierte Segmente erzeugt.', 'ok');
+
+    const roads = buildRoadBases(normalizedSegments, options);
+    log(roads.length + ' Straßenbasisobjekte erzeugt.', 'ok');
+
+    const nextRefCounter = addDirectReferencesToRoads(roads);
+    log('Direkte Straßenreferenzen aus Tags ermittelt.', 'ok');
+
+    const overlayObjects = buildOverlayObjects(normalizedSegments, options);
+    log(overlayObjects.length + ' Overlay-/Nebenobjekte aufgebaut.', 'ok');
+
+    const externalResult = mapExternalOverlaysToRoads(overlayObjects, roads, options, nextRefCounter);
+    const standalone = buildStandaloneOutput(overlayObjects);
+
+    const finalizedRoads = finalizeRoads(roads);
+    const output = {
+        metadata: {
+            generated: new Date().toISOString(),
+            sourceFile: state.inputName,
+            version: 'oo-converter-v3',
+            options,
+            counts: {
+                sourceFeatures: state.sourceFeatures.length,
+                normalizedSegments: normalizedSegments.length,
+                roads: finalizedRoads.length,
+                standalone: standalone.length,
+                chains: finalizedRoads.length + standalone.length,
+                totalReferences: finalizedRoads.reduce((sum, r) => sum + r.references.length, 0)
+            }
+        },
+        roads: finalizedRoads,
+        standalone,
+        chains: buildChainsOutput(finalizedRoads, standalone)
+    };
+
+    const debugInfo = {
+        options,
+        directReferenceStats: roads.map(r => ({roadId:r.roadId, name:r.name, references:r.references.length})).slice(0, 60),
+        externalLinks: externalResult.linkDiagnostics,
+        normalizedSegmentsSample: normalizedSegments.slice(0, 20).map(s => ({
+            segmentId: s.segmentId,
+            name: s.name,
+            baseClassId: s.baseClassId,
+            refsFromTags: s.referencesFromTags
+        }))
+    };
+
+    state.output = output;
+    state.debug = debugInfo;
+
+    updatePreviews(output, debugInfo);
+    updateStats(output, debugInfo);
+
+    els.downloadFullBtn.disabled = false;
+    els.downloadRoadBtn.disabled = false;
+    els.downloadStandaloneBtn.disabled = false;
+    els.downloadDebugBtn.disabled = false;
+
+    setStatus('OO-Modell erfolgreich erzeugt.', 'ok');
+    log('Konvertierung abgeschlossen. ' + output.roads.length + ' Straßenbasisobjekte, ' + standalone.length + ' Standalone-Objekte.', 'ok');
+}
+
+function convertOverpassRawToFeatureCollection(data){
+    const elements = Array.isArray(data && data.elements) ? data.elements : [];
+    if (!elements.length) throw new Error('Overpass-RAW-JSON enthält keine elements.');
+
+    const nodeMap = new Map();
+    elements.forEach(el => {
+        if (el && el.type === 'node' && Number.isFinite(el.lon) && Number.isFinite(el.lat)){
+            nodeMap.set(el.id, [el.lon, el.lat]);
+        }
+    });
+
+    const features = [];
+    elements.forEach(el => {
+        if (!el || el.type !== 'way' || !Array.isArray(el.nodes) || el.nodes.length < 2) return;
+        const coords = el.nodes.map(nodeId => nodeMap.get(nodeId)).filter(Boolean);
+        if (coords.length < 2) return;
+        features.push({
+            type: 'Feature',
+            properties: {
+                ...(el.tags || {}),
+                sourceType: 'overpass_raw_way',
+                sourceWayId: el.id,
+                sourceNodeCount: el.nodes.length
+            },
+            geometry: {
+                type: 'LineString',
+                coordinates: coords
+            }
+        });
+    });
+
+    if (!features.length) throw new Error('Im Overpass-RAW-JSON wurden keine Way-Linien gefunden.');
+    return { type: 'FeatureCollection', features };
+}
+
+function parseInputData(text){
+    const data = JSON.parse(text);
+    if (data && data.type === 'FeatureCollection' && Array.isArray(data.features)) return data;
+    if (data && Array.isArray(data.elements)) return convertOverpassRawToFeatureCollection(data);
+    throw new Error('Es wird GeoJSON, eine FeatureCollection oder Overpass-RAW-JSON mit ways/nodes benötigt.');
+}
+
+function handleFile(file){
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try{
+            const text = String(event.target.result || '');
+            const data = parseInputData(text);
+            state.inputName = file.name;
+            state.rawData = data;
+            state.sourceFeatures = data.features.filter(f => f && f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString'));
+            if(!state.sourceFeatures.length) throw new Error('Keine LineString- oder MultiLineString-Features gefunden.');
+            els.convertBtn.disabled = false;
+            setStatus(state.sourceFeatures.length + ' Features geladen. Jetzt OO erzeugen.', 'ok');
+            log(file.name + ' geladen: ' + state.sourceFeatures.length + ' Features.', 'ok');
+            els.sourcePreview.textContent = JSON.stringify(summarizeSourceFeatures(state.sourceFeatures), null, 2);
+        } catch(err){
+            setStatus('Fehler beim Laden: ' + err.message, 'err');
+            log('Fehler beim Laden: ' + err.message, 'err');
+        }
+    };
+    reader.onerror = () => {
+        setStatus('Datei konnte nicht gelesen werden.', 'err');
+        log('Datei konnte nicht gelesen werden.', 'err');
+    };
+    reader.readAsText(file, 'utf-8');
+}
+
+function downloadJson(filename, data){
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function resetAll(){
+    state.inputName = '';
+    state.rawData = null;
+    state.sourceFeatures = [];
+    state.normalizedSegments = [];
+    state.output = null;
+    state.debug = null;
+
+    els.convertBtn.disabled = true;
+    els.downloadFullBtn.disabled = true;
+    els.downloadRoadBtn.disabled = true;
+    els.downloadStandaloneBtn.disabled = true;
+    els.downloadDebugBtn.disabled = true;
+
+    setStatus('Bereit. Bitte eine OSM-GeoJSON-Datei laden.');
+    els.logBox.textContent = '[SYSTEM] Zurückgesetzt.';
+    els.sourcePreview.textContent = 'Noch keine Daten.';
+    els.roadsPreview.textContent = 'Noch keine Daten.';
+    els.standalonePreview.textContent = 'Noch keine Daten.';
+    els.debugPreview.textContent = 'Noch keine Daten.';
+
+    ['statFeatures','statSegments','statRoads','statStandalone','statRefs','statLinks'].forEach(id => document.getElementById(id).textContent = '0');
+}
+function wireUi(){
+    els.dropZone.addEventListener('click', () => els.fileInput.click());
+    els.fileInput.addEventListener('change', e => {
+        const file = e.target.files && e.target.files[0];
+        if(file) handleFile(file);
+    });
+    els.dropZone.addEventListener('dragover', e => {
+        e.preventDefault();
+        els.dropZone.classList.add('drag');
+    });
+    els.dropZone.addEventListener('dragleave', () => els.dropZone.classList.remove('drag'));
+    els.dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        els.dropZone.classList.remove('drag');
+        const file = e.dataTransfer.files && e.dataTransfer.files[0];
+        if(file) handleFile(file);
+    });
+
+    els.convertBtn.addEventListener('click', convertNow);
+    els.resetBtn.addEventListener('click', resetAll);
+    els.downloadFullBtn.addEventListener('click', () => state.output && downloadJson((state.inputName.replace(/\.[^.]+$/, '') || 'osm') + '_oo_v2.json', state.output));
+    els.downloadRoadBtn.addEventListener('click', () => state.output && downloadJson((state.inputName.replace(/\.[^.]+$/, '') || 'osm') + '_roads_only.json', {metadata: state.output.metadata, roads: state.output.roads}));
+    els.downloadStandaloneBtn.addEventListener('click', () => state.output && downloadJson((state.inputName.replace(/\.[^.]+$/, '') || 'osm') + '_standalone_only.json', {metadata: state.output.metadata, standalone: state.output.standalone}));
+    els.downloadDebugBtn.addEventListener('click', () => state.debug && downloadJson((state.inputName.replace(/\.[^.]+$/, '') || 'osm') + '_debug_v2.json', {metadata: state.output ? state.output.metadata : {}, debug: state.debug}));
+}
+
+wireUi();
+})();
+</script>
+</body>
+</html>
