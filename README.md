@@ -167,53 +167,19 @@ Feature (LineString oder MultiLineString)
 ### Phase 2 – Klassifizierung
 
 **Funktion:** `inferBaseClass(props)`
-
 Jedes Segment bekommt eine **Basis-Klassen-ID** (A–H):
 
-```
-Regelwerk zur Klassifizierung von Wegtypen (Zielattribute G, B, D, E, F, H)
+| Zielattribut | Bedeutung | Regel (OSM-Tags) |
+|--------------|-----------|------------------|
+| **G** | Privatstraße | `access=private` oder `access=no` oder `service=driveway` |
+| **B** | Radweg | `highway=cycleway`<br>oder `highway=path` + (`bicycle=designated` oder `bicycle=official`) |
+| **D** | Fußweg mit Rad frei | (`highway=footway` oder `highway=pedestrian`) + `bicycle=yes`<br>oder `highway=path` + `foot=yes` + `bicycle=yes` |
+| **E** | Straße | `isStreetHighway(highway)` = true<br>(z. B. `residential`, `unclassified`, `tertiary`, …) |
+| **F** | Land-/Forstweg | `highway=track` + `bicycle` ≠ `no`<br>oder `highway=path` + `bicycle` ≠ `no` |
+| **H** | Sonstiges | Alle Fälle, die nicht in die oberen Kategorien fallen |
 
-Privatstraße (G)
+> **Hinweis:** `bicycle ≠ no` bedeutet: `bicycle=yes` / `designated` / `official` / `permissive` (alles außer `no`).
 
-access=private ODER access=no
-
-ODER service=driveway
-
-Radweg (B)
-
-highway=cycleway
-
-ODER highway=path + (bicycle=designated ODER bicycle=official)
-
-Fußweg mit Rad frei (D)
-
-(highway=footway ODER highway=pedestrian) + bicycle=yes
-
-ODER highway=path + foot=yes + bicycle=yes
-
-Straße (E)
-
-isStreetHighway(highway) = true
-(Annahme: erfasst alle highway-Werte, die übliche Straßentypen darstellen, z. B. residential, unclassified, tertiary, etc.)
-
-Land-/Forstweg (F)
-
-highway=track + bicycle ≠ no
-
-ODER highway=path + bicycle ≠ no
-
-Sonstiges (H)
-
-Alle Fälle, die nicht in 1–5 fallen
-access=private/no  ODER  service=driveway   →  G  (Privatstraße)
-highway=cycleway                            →  B  (Radweg)
-highway=path + bicycle=designated/official  →  B  (Radweg)
-highway=footway/pedestrian + bicycle=yes    →  D  (Fußweg mit Rad frei)
-highway=path + foot=yes + bicycle=yes       →  D
-isStreetHighway(highway)                    →  E  (Straße)
-highway=track + bicycle≠no                  →  F  (Land-/Forstweg)
-highway=path + bicycle≠no                   →  F
-sonst                                       →  H  (Sonstiges)
 ```
 
 `isStreetHighway` erkennt: `residential`, `living_street`, `unclassified`, `service`,
@@ -235,7 +201,7 @@ Weg kodiert sind:
 | `cycleway:both/left/right = lane` | Klasse **C** (Schutzstreifen), Seite |
 | `cycleway:...:lane = advisory/exclusive` | Klasse **C** (Schutzstreifen) |
 | `cycleway = shared_lane` | Klasse **C** (Shared Lane) |
-
+```
 Duplikate (gleiche classId + kind + side + direction) werden mit `uniqueBy()`
 entfernt.  
 Jede erkannte Referenz ist ein Objekt mit:
