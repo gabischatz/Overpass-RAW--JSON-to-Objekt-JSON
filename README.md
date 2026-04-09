@@ -1,7 +1,7 @@
 # 🚲 OSM overpass-raw → OO Konverter v1.0.0
 
 Wandelt eine **Overpass-RAW-JSON** oder **GeoJSON-FeatureCollection** mit OSM-Wegedaten
-in ein **objektorientiertes JSON-Modell** um.  
+in ein **objektorientiertes JSON-Modell** (OO) um.  
 Straßen werden zu Basisobjekten; Radwege, Schutzstreifen und Routen werden als
 positionsbezogene `references` darauf verknüpft.
 
