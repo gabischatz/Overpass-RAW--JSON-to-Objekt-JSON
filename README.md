@@ -7,6 +7,60 @@ positionsbezogene `references` darauf verknüpft.
 
 ---
 
+## ℹ️ Woher kommt die Eingabedatei?
+
+Die Datei `tour-analyzer-pro-v17-overpass-raw.json` (oder ähnlich benannt) wird vom
+**Tour Analyzer Pro** erzeugt und kann dort direkt heruntergeladen werden.
+
+### Wie der Tour Analyzer die Datei erstellt
+
+1. **GPX-Datei laden** – Der Benutzer lädt eine GPX-Touraufzeichnung in den Tour Analyzer.
+   Das Werkzeug liest alle Trackpunkte und berechnet daraus eine Bounding Box
+   (Ausdehnung der Tour plus ca. 315 m Puffer auf jeder Seite).
+
+2. **Overpass-Abfrage aufbauen** – Aus der Bounding Box wird automatisch eine
+   Overpass-QL-Abfrage zusammengestellt. Sie fragt in einem einzigen Aufruf ab:
+   - alle Fahrradrouten-Relationen (`type=route`, `route=bicycle`)
+   - Relationen mit Netzwerk-Tag `lcn`, `rcn` oder `ncn`
+   - alle relevanten Wege (`highway=cycleway/path/track/service/footway/
+     living_street/residential/unclassified/tertiary/secondary/primary`)
+   - Wege mit `bicycle_road=yes` oder `cyclestreet=yes`
+   - Wege mit einem beliebigen `cycleway`-Tag
+
+   Die fertige Abfrage sieht so aus:
+   ```
+   [out:json][timeout:120];
+   (
+     relation["type"="route"]["route"="bicycle"](süd,west,nord,ost);
+     relation["route"="bicycle"]["network"~"^(lcn|rcn|ncn)$"](süd,west,nord,ost);
+     way["highway"~"cycleway|path|track|..."](süd,west,nord,ost);
+     way["bicycle_road"="yes"](süd,west,nord,ost);
+     way["cyclestreet"="yes"](süd,west,nord,ost);
+     way["cycleway"](süd,west,nord,ost);
+   );
+   out body;>;out geom qt;
+   ```
+   Alternativ kann auch direkt eine OSM-Relationskennung (z.B. `12345`) eingegeben
+   werden; dann lautet die Abfrage vereinfacht:
+   `[out:json][timeout:90];relation(12345);(._;>;);out geom;`
+
+3. **Abfrage abschicken** – Die Abfrage wird als HTTP-POST an die Overpass-API
+   geschickt (`overpass-api.de`, mit automatischem Fallback auf
+   `overpass.kumi.systems` und `overpass.openstreetmap.ru` bei Fehler oder
+   Rate-Limit). Timeout je Versuch: 35 Sekunden, bis zu 3 Versuche pro Endpunkt.
+
+4. **Rohantwort speichern & exportieren** – Die API antwortet mit einem
+   JSON-Objekt im Overpass-RAW-Format (`{ "elements": [...] }`).
+   Das Werkzeug speichert diese Antwort intern und stellt sie über den Button
+   **„⬇️ Rohantwort"** als `tour-analyzer-pro-v17-overpass-raw.json` zum
+   Download bereit.
+
+5. **Diese Datei ist der Eingang für den OO-Konverter.** Sie enthält alle
+   `node`-, `way`- und `relation`-Elemente des abgefragten Gebiets im
+   Overpass-RAW-Format und kann direkt in den OO-Konverter geladen werden.
+
+---
+
 ## Inhaltsverzeichnis
 
 1. [Überblick](#1-überblick)
@@ -35,7 +89,7 @@ positionsbezogene `references` darauf verknüpft.
 ```
 Overpass-RAW-JSON  ──┐
                      ├──► parseInputData() ──► FeatureCollection ──► OO-JSON
-GeoJSON              ──┘
+GeoJSON            ──┘
 ```
 
 Das Werkzeug läuft vollständig im Browser (eine einzelne HTML-Datei, kein Server
